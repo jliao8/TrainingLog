@@ -18,44 +18,107 @@ dbDisconnect(connection)
 
 # max weight for all lifts (time series with highlight text box of metadata)
 maxWeight <- function(){
-  by(liftDf[,c("Set 1","Set 2","Set 3","Set 4")],liftDf$Lift, FUN= function(x) max(x, na.rm=TRUE))
+  by(liftDf[,grep("^Set ",names(liftDf),value=TRUE)],liftDf$Lift, FUN= function(x) max(x, na.rm=TRUE))
 }
-
-# frequency of sets and reps (lift, day, location, date range, order)
-allReps <- as.vector(as.matrix(liftDf[,c("Reps Set 1","Reps Set 2","Reps Set 3","Reps Set 4")])) #https://stackoverflow.com/a/20537229
-hist(allReps)
-
-# frequency of lifts (day, location, date range, order)
-barplot(table(liftDf$Lift))
-
-# frequency of days (lift, location, date range, order)
-barplot(table(metaDf$Day))
 
 # relationship between (place-lift) and (order-weight/reps)
 
 freqPlot <- function(id) {
-  plotOutput(NS(id, "hist"),height="85vh")
+  plotOutput(NS(id, "hist"),height="90vh")
 }
 
 freqInput <- function(id) {
   inputs <- list(selectizeInput(NS(id,"selectizePlace"),"Select Places:", choices=unique(metaDf$Place), multiple=TRUE),
-                 selectizeInput(NS(id,"selectizeOrder"),"Select Orders:", choices=unique(liftDf$`Order Num`), multiple=TRUE),
+                 input_switch(NS(id,"switchPlace"), "Select All"),
+                 selectizeInput(NS(id,"selectizeOrder"),"Select Exercise Orders:", choices=unique(liftDf$`Order Num`), multiple=TRUE),
+                 input_switch(NS(id,"switchOrder"), "Select All"),
                  dateRangeInput(NS(id,"dateRange"),"Date Range:",start=min(liftDf$Date), end=max(liftDf$Date)))
+  selectDay <- list(selectizeInput(NS(id,"selectizeDay"),"Select Days:", choices=list("Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"), multiple=TRUE),
+                    input_switch(NS(id,"switchDay"), "Select All"))
+  selectLift <- list(selectizeInput(NS(id,"selectizeLift"),"Select Lifts:", choices=unique(liftDf$Lift), multiple=TRUE),
+                     input_switch(NS(id,"switchLift"), "Select All"))
   if (id=="Lift"){
-    inputs <- c(inputs,list(selectizeInput(NS(id,"selectizeDay"),"Select Days:", choices=list("Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"), multiple=TRUE)))
+    inputs <- c(selectDay,inputs)
   } else if (id=="Day"){
-    inputs <- c(inputs,list(selectizeInput(NS(id,"selectizeLift"),"Select Lifts:", choices=unique(liftDf$Lift), multiple=TRUE)))
+    inputs <- c(selectLift,inputs)
   } else {
-    inputs <- c(inputs,list(selectizeInput(NS(id,"selectizeDay"),"Select Days:", choices=list("Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"), multiple=TRUE),
-                            selectizeInput(NS(id,"selectizeLift"),"Select Lifts:", choices=unique(liftDf$Lift), multiple=TRUE)))
+    inputs <- c(selectLift,selectDay,inputs)
   }
-  inputs
+  tagList(inputs)
 }
 
 freqServer <- function(id) {
   moduleServer(id, function(input, output, session) {
-    data <- reactive(liftDf[liftDf$Lift %in% input$selectizeLift,])
-    output$hist <- renderPlot({ggplot(data=data(), aes(x=Lift)) +geom_bar() + theme(text=element_text(size=15),axis.text.x=element_text(size=15))})
+    observeEvent(c(input$switchPlace,input$selectizePlace,input$switchOrder,input$selectizeOrder),{
+      if (input$switchPlace){updateSelectizeInput(session,"selectizePlace",selected=unique(metaDf$Place))} 
+      if (input$switchOrder){updateSelectizeInput(session,"selectizeOrder",selected=unique(liftDf$`Order Num`))} 
+    })
+    if (id=="Lift"){
+      observeEvent(c(input$switchDay,input$selectizeDay),{
+        if (input$switchDay){updateSelectizeInput(session,"selectizeDay",selected=unique(metaDf$Day))} 
+      }) 
+      data <- reactive({merge(liftDf[liftDf$'Order Num' %in% input$selectizeOrder & input$dateRange[1] <= liftDf$Date & liftDf$Date <= input$dateRange[2],],
+                              metaDf[metaDf$Day %in% input$selectizeDay & metaDf$Place %in% input$selectizePlace,],by.x="Location Id",by.y="Id")})
+      maxCount <- reactive({
+        if (length(data()$Lift)){max(table(data()$Lift))} 
+        else {100} # magic number (rid of warning)
+      }) 
+      # https://stackoverflow.com/a/9231857
+      output$hist <- renderPlot({ggplot(data=data(),mapping=aes(x=reorder(Lift,Lift,function(x)-length(x)))) + geom_bar() + scale_y_continuous(breaks=seq(0,maxCount()+10,by=10),expand=c(0,0),limits=c(0,maxCount()+10)) + 
+                                 xlab("Lift") + ylab("Count") + theme(text=element_text(size=15))})
+    } else if (id=="Set"){
+      observeEvent(c(input$switchLift,input$selectizeLift,input$switchDay,input$selectizeDay),{
+          if (input$switchLift){updateSelectizeInput(session,"selectizeLift",selected=unique(liftDf$Lift))} 
+          if (input$switchDay){updateSelectizeInput(session,"selectizeDay",selected=unique(metaDf$Day))} 
+      })
+      setsData <- reactive({
+        data <- merge(liftDf[liftDf$'Order Num' %in% input$selectizeOrder & input$dateRange[1] <= liftDf$Date & liftDf$Date <= input$dateRange[2] & liftDf$Lift %in% input$selectizeLift,],
+                       metaDf[metaDf$Day %in% input$selectizeDay & metaDf$Place %in% input$selectizePlace,],by.x="Location Id",by.y="Id")
+        data[,grep("^Set ",names(data),value=TRUE)] # https://stackoverflow.com/a/26813671
+      })
+      data <- reactive({
+        stackData <- stack(setsData()) 
+        stackData[!is.na(stackData$value),]
+      })
+      maxCount <- reactive({max(colSums(!is.na(setsData())))}) # https://stackoverflow.com/a/46106565
+      output$hist <- renderPlot({ggplot(data=data(),mapping=aes(x=ind)) +  geom_bar() + scale_y_continuous(breaks=seq(0,maxCount()+10,by=10),expand=c(0,0),limits=c(0,maxCount()+10)) + xlab("Set") + ylab("Count") +
+                                 theme(text=element_text(size=15))})
+    } else if (id=="Rep"){
+      observeEvent(c(input$switchLift,input$selectizeLift,input$switchDay,input$selectizeDay),{
+          if (input$switchLift){updateSelectizeInput(session,"selectizeLift",selected=unique(liftDf$Lift))} 
+          if (input$switchDay){updateSelectizeInput(session,"selectizeDay",selected=unique(metaDf$Day))} 
+      })
+      allReps <- reactive({
+        data <- merge(liftDf[liftDf$'Order Num' %in% input$selectizeOrder & input$dateRange[1] <= liftDf$Date & liftDf$Date <= input$dateRange[2] & liftDf$Lift %in% input$selectizeLift,],
+                       metaDf[metaDf$Day %in% input$selectizeDay & metaDf$Place %in% input$selectizePlace,],by.x="Location Id",by.y="Id")
+        as.vector(as.matrix(data[,grep("Reps Set ",names(data),value=TRUE)])) #https://stackoverflow.com/a/20537229
+      }) 
+      maxRep <- reactive({
+        if (length(allReps())){max(allReps(),na.rm=TRUE)} 
+        else {20} # magic number (rid of warning) 
+      })
+      maxCount <- reactive({
+        if (length(allReps())){max(table(allReps()))} 
+        else {500} # magic number (rid of warning)
+      })
+      output$hist <- renderPlot({ggplot(mapping=aes(allReps())) + geom_histogram(na.rm=T,binwidth=1) + scale_x_continuous(breaks=seq(1,maxRep(),by=1)) + 
+                                 scale_y_continuous(breaks=seq(0,maxCount()+10,by=10),expand=c(0,0),limits = c(0,maxCount()+10)) + xlab("Rep") + ylab("Count") + theme(text=element_text(size=15))})
+    } else if (id=="Day"){
+      observeEvent(c(input$switchLift,input$selectizeLift),{
+        if (input$switchLift){updateSelectizeInput(session,"selectizeLift",selected=unique(liftDf$Lift))} 
+      })
+      data <- reactive({
+        mergedData <- merge(liftDf[liftDf$'Order Num' %in% input$selectizeOrder & input$dateRange[1] <= liftDf$Date & liftDf$Date <= input$dateRange[2] & liftDf$Lift %in% input$selectizeLift,],
+                            metaDf[metaDf$Place %in% input$selectizePlace,],by.x="Location Id",by.y="Id")
+        mergedData[!duplicated(mergedData[,"Location Id"]),] # no duplicate location id (only care about Day) https://stackoverflow.com/a/9945116
+      })
+      maxCount <- reactive({
+        if (length(data()$Day)){max(table(data()$Day))} 
+        else {100} # magic number (rid of warning)
+      })
+      output$hist <- renderPlot({ggplot(data=data(), aes(x=reorder(Day,Day,function(x)-length(x)))) + geom_bar() + scale_y_continuous(breaks=seq(0,maxCount()+5,by=5),expand=c(0,0),limits=c(0,maxCount()+5)) + 
+                                 xlab("Rep") + ylab("Count") + theme(text=element_text(size=15))})
+    }
   })
 }
 
