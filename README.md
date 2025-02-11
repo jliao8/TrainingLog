@@ -1,9 +1,12 @@
 # Setup
-1. Execute **ProcessTrainingLog.py** with python to update **traininglog.db**.
-   - There are some required libraries needed to run the script.
-3. Open **app.R** in RStudio and execute **runGadget** function.
-   - There are some required packages needed to install.
-
+1. Requires an installation of Python with **pip**, **venv**, and **sqlite3**. Bash shell is also required to run the script.
+2. To display the dashboard and install dependencies. Type ```./runDashboard.sh``` inside the **TrainingLog** folder.
+    - The script will install **odfpy** and **pandas** in a virtual environment.
+        - odfpy is needed for the spreadsheet. 
+    - **ProcessTrainingLog.py** will run and update **traininglog.db**.
+    - **app.R** will then run and the dashboard will be in the browser.
+        - Neccessary R packages are installed with **pacman**.  
+   
 # Spreadsheet Format
 - The colon comes after the specified rep count. Numbers after the colon represent weight in pounds.  
 - The comma separates sets.       

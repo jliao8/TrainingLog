@@ -1,9 +1,6 @@
-#install.packages("RSQLite")
-#install.packages("shiny")
-#install.packages("bslib")
-#install.packages("ggplot2")
-#install.packages("tidyr")
-#install.packages("plotly")
+install.packages("pacman")
+library(pacman)
+p_load(RSQLite,shiny,bslib,ggplot2,tidyr,plotly)
 library(RSQLite)
 library(shiny)
 library(bslib)
@@ -74,7 +71,7 @@ freqServer <- function(id) {
       }) 
       # https://stackoverflow.com/a/9231857
       output$hist <- renderPlot({ggplot(data=data(),mapping=aes(x=reorder(Lift,Lift,function(x)-length(x)))) + geom_bar() + scale_y_continuous(breaks=seq(0,maxCount()+10,by=10),expand=c(0,0),limits=c(0,maxCount()+10)) + 
-                                 labs(x="Lift",y="Count") + stat_count(geom="text", color="black", aes(label=..count..),vjust=-1) + theme(text=element_text(size=15))}) # https://stackoverflow.com/a/24199013
+                                 labs(x="Lift",y="Count") + stat_count(geom="text", color="black", aes(label=after_stat(count)),vjust=-1) + theme(text=element_text(size=15))}) # https://stackoverflow.com/a/24199013
     } else if (id=="Set"){
       observeEvent(c(input$switchLift,input$selectizeLift,input$switchDay,input$selectizeDay),{
           if (input$switchLift){updateSelectizeInput(session,"selectizeLift",selected=unique(liftDf$Lift))} 
@@ -93,7 +90,7 @@ freqServer <- function(id) {
       })
       maxCount <- reactive({max(colSums(!is.na(setsData())))}) # https://stackoverflow.com/a/46106565
       output$hist <- renderPlot({ggplot(data=data(),mapping=aes(x=ind)) +  geom_bar() + scale_y_continuous(breaks=seq(0,maxCount()+10,by=10),expand=c(0,0),limits=c(0,maxCount()+10)) + labs(x="Set",y="Count") +
-                                 stat_count(geom="text", color="black", aes(label=..count..),vjust=-1.5) + theme(text=element_text(size=15))})
+                                 stat_count(geom="text", color="black", aes(label=after_stat(count)),vjust=-1.5) + theme(text=element_text(size=15))})
     } else if (id=="Rep"){
       observeEvent(c(input$switchLift,input$selectizeLift,input$switchDay,input$selectizeDay),{
           if (input$switchLift){updateSelectizeInput(session,"selectizeLift",selected=unique(liftDf$Lift))} 
@@ -114,7 +111,7 @@ freqServer <- function(id) {
       })
       output$hist <- renderPlot({ggplot(mapping=aes(allReps())) + geom_histogram(na.rm=T,binwidth=1) + scale_x_continuous(breaks=seq(1,maxRep(),by=1)) + 
                                  scale_y_continuous(breaks=seq(0,maxCount()+10,by=10),expand=c(0,0),limits = c(0,maxCount()+10)) + labs(x="Rep",y="Count") +
-                                 stat_bin(binwidth=1, geom="text", color="black", aes(label=..count..),vjust=-1,na.rm=TRUE) + theme(text=element_text(size=15))})
+                                 stat_bin(binwidth=1, geom="text", color="black", aes(label=after_stat(count)),vjust=-1,na.rm=TRUE) + theme(text=element_text(size=15))})
     } else if (id=="Day"){
       observeEvent(c(input$switchLift,input$selectizeLift),{
         if (input$switchLift){updateSelectizeInput(session,"selectizeLift",selected=unique(liftDf$Lift))} 
@@ -129,7 +126,7 @@ freqServer <- function(id) {
         else {100} # magic number (rid of warning)
       })
       output$hist <- renderPlot({ggplot(data=data(), aes(x=reorder(Day,Day,function(x)-length(x)))) + geom_bar() + scale_y_continuous(breaks=seq(0,maxCount()+5,by=5),expand=c(0,0),limits=c(0,maxCount()+5)) + 
-                                 labs(x="Day",y="Count") + stat_count(geom="text", color="black", aes(label=..count..),vjust=-1) + theme(text=element_text(size=15))})
+                                 labs(x="Day",y="Count") + stat_count(geom="text", color="black", aes(label=after_stat(count)),vjust=-1) + theme(text=element_text(size=15))})
     }
   })
 }
@@ -242,6 +239,5 @@ server <- function(input, output,session) {
   freqServer("Day")
   
 }
-runGadget(ui, server, viewer = dialogViewer("Dialog Title", width = 1920, height = 1080))
-#shinyApp(ui, server)
-
+#runGadget(ui, server, viewer = dialogViewer("Dialog Title", width = 1920, height = 1080))
+shinyApp(ui, server)
